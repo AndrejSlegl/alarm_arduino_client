@@ -3,17 +3,18 @@
 #include "WiFiPersistentConnector.h"
 #include "ValueChangeEventQueue.h"
 
-#define DEBUG
+//#define DEBUG
 
 const char NEW_LINE[] = "\r\n";
 const int lightSensorPin = 0;
 const int clientLedPin = 6;
-const int movementSensorPin0 = 7;
+const int movementSensor0Pin = 0;
 const int sensorReadingPositiveThreshold = 980;
 const int readingSamplingMillis = 50;
 
 const char sectorText[] = "sector0:";
 const char rssiText[] = "rssi:";
+const char movement0Text[] = "movement0:";
 const char statusQueryText[] = "status?";
 char server[] = "192.168.1.111";
 int port = 43254;
@@ -28,6 +29,7 @@ bool prevSensorState = false;
 int sensorValueSum = 0;
 int sensorValueCount = 0;
 int sensorLastSampleMillis = 0;
+bool movementSensor0Value = false;
 
 void updateClientConnectionStatus(bool connected) {
   if (clientConnected == connected)
@@ -64,12 +66,12 @@ void keepClientConnected() {
 void setup() {
 #ifdef DEBUG
   Serial.begin(9600);
-  while (!Serial);
+  //while (!Serial);
 #else
   clientConnectionOn = true;
 #endif
 
-  pinMode(movementSensorPin0, INPUT_PULLUP);
+  pinMode(movementSensor0Pin, INPUT_PULLUP);
   pinMode(clientLedPin, OUTPUT);
   connector.start();
 }
@@ -83,6 +85,11 @@ void loop() {
 
 #ifdef DEBUG
     Serial.println(wifiConnected ? "WiFi Connected" : "WiFi Disconnected");
+    if (wifiConnected) {
+      IPAddress ip = WiFi.localIP();
+      Serial.print("IP Address: ");
+      Serial.println(ip);
+    }
 #endif
   }
 
@@ -90,10 +97,6 @@ void loop() {
   while (client.available() && serverCommand.lastIndexOf(NEW_LINE) < 0) {
     char c = client.read();
     serverCommand += c;
-    
-#ifdef DEBUG
-    //Serial.print(c);
-#endif
   }
 
   keepClientConnected();
@@ -127,7 +130,7 @@ void loop() {
     sensorValueSum = 0;
     sensorValueCount = 0;
     sensorLastSampleMillis = time;
-
+    
     bool sensorState = sensorValue >= sensorReadingPositiveThreshold;
 
     if (sensorState != prevSensorState) {
@@ -144,23 +147,23 @@ void loop() {
       client.println(event->value);
     }
 
+    bool digitalValue = !digitalRead(movementSensor0Pin);
+  
+    if (digitalValue != movementSensor0Value) {
+      movementSensor0Value = digitalValue;
+      client.print(movement0Text);
+      client.println(movementSensor0Value ? 1 : 0);
+    }
+
     if (serverCommand.startsWith(statusQueryText)) {
       client.print(sectorText);
       client.print(prevSensorState ? 1 : 0);
+      client.print(',');
+      client.print(movement0Text);
+      client.print(movementSensor0Value ? 1 : 0);
       client.print(',');
       client.print(rssiText);
       client.println(WiFi.RSSI());
     }
   }
-
-#ifdef DEBUG
-  if (clientConnected) {
-    if (command == "send") {
-      Serial.println("Sending request");
-      client.print(sectorText);
-      client.println(prevSensorState ? 1 : 0);
-    }
-  }
-#endif
-
 }
