@@ -9,6 +9,7 @@ const char NEW_LINE[] = "\r\n";
 const int lightSensorPin = 0;
 const int clientLedPin = 6;
 const int movementSensor0Pin = 0;
+const int sirenPin = 7;
 const int sensorReadingPositiveThreshold = 980;
 const int readingSamplingMillis = 50;
 
@@ -21,6 +22,7 @@ int port = 43254;
 WiFiPersistentConnector connector("SLEGL WiFi", "pnr41wlan");
 WiFiClient client;
 ValueChangeEventQueue lightSensorEventQueue(20);
+ValueChangeEventQueue movementSensor0EventQueue(20);
 bool wifiConnected = false;
 bool clientConnected = false;
 bool clientConnectionOn = true;
@@ -73,6 +75,10 @@ void setup() {
 
   pinMode(movementSensor0Pin, INPUT_PULLUP);
   pinMode(clientLedPin, OUTPUT);
+  pinMode(sirenPin, OUTPUT);
+
+  digitalWrite(sirenPin, HIGH);
+  
   connector.start();
 }
 
@@ -139,20 +145,26 @@ void loop() {
     }
   }
 
+  bool digitalValue = !digitalRead(movementSensor0Pin);
+  
+  if (digitalValue != movementSensor0Value) {
+    movementSensor0Value = digitalValue;
+    movementSensor0EventQueue.addNewEvent(ValueChangeEvent(movementSensor0Value ? 1 : 0));
+  }
+
   if (clientConnected) {
-    const ValueChangeEvent* event = lightSensorEventQueue.getNextEvent();
+    ValueChangeEvent* event = lightSensorEventQueue.getNextEvent();
 
     if (event != NULL) {
       client.print(sectorText);
       client.println(event->value);
     }
 
-    bool digitalValue = !digitalRead(movementSensor0Pin);
-  
-    if (digitalValue != movementSensor0Value) {
-      movementSensor0Value = digitalValue;
+    event = movementSensor0EventQueue.getNextEvent();
+    
+    if (event != NULL) {
       client.print(movement0Text);
-      client.println(movementSensor0Value ? 1 : 0);
+      client.println(event->value);
     }
 
     if (serverCommand.startsWith(statusQueryText)) {
