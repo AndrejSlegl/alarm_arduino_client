@@ -10,9 +10,9 @@ const int lightSensorPin = 0;
 const int clientLedPin = 6;
 const int movementSensor0Pin = 0;
 const int sirenPin = 7;
-const int sensorReadingPositiveThreshold = 980;
-const int readingSamplingMillis = 50;
-const int sirenTimeoutMillis = 5 * 1000 * 60;
+int sensorReadingPositiveThreshold = 800;
+int readingSamplingMillis = 50;
+int sirenTimeoutMillis = 5 * 1000 * 60;
 
 const char sectorText[] = "sector0:";
 const char rssiText[] = "rssi:";
@@ -223,6 +223,12 @@ void loop() {
   
             if (!sirenActivated)
               stopSiren();
+          } else if (parameterName == "readingSamplingMillis") {
+            readingSamplingMillis = integerValue;
+          } else if (parameterName == "sensorReadingPositiveThreshold") {
+            sensorReadingPositiveThreshold = integerValue;
+          } else if (parameterName == "sirenTimeoutMillis") {
+            sirenTimeoutMillis = integerValue;
           }
         }
       }
