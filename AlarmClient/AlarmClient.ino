@@ -12,11 +12,13 @@ const int movementSensor0Pin = 0;
 const int sirenPin = 7;
 const int sensorReadingPositiveThreshold = 980;
 const int readingSamplingMillis = 50;
+const int sirenTimeoutMillis = 5 * 1000 * 60;
 
 const char sectorText[] = "sector0:";
 const char rssiText[] = "rssi:";
 const char movement0Text[] = "movement0:";
 const char statusQueryText[] = "status?";
+const char stopSirenText[] = "stopSiren!";
 char server[] = "192.168.1.111";
 int port = 43254;
 WiFiPersistentConnector connector("SLEGL WiFi", "pnr41wlan");
@@ -32,6 +34,7 @@ int sensorValueSum = 0;
 int sensorValueCount = 0;
 int sensorLastSampleMillis = 0;
 bool movementSensor0Value = false;
+int sirenStartedMillis = 0;
 
 void updateClientConnectionStatus(bool connected) {
   if (clientConnected == connected)
@@ -65,6 +68,16 @@ void keepClientConnected() {
   }
 }
 
+void startSiren() {
+  digitalWrite(sirenPin, HIGH);
+  sirenStartedMillis = millis();
+}
+
+void stopSiren() {
+  digitalWrite(sirenPin, LOW);
+  sirenStartedMillis = -1;
+}
+
 void setup() {
 #ifdef DEBUG
   Serial.begin(9600);
@@ -77,7 +90,7 @@ void setup() {
   pinMode(clientLedPin, OUTPUT);
   pinMode(sirenPin, OUTPUT);
 
-  digitalWrite(sirenPin, HIGH);
+  stopSiren();
   
   connector.start();
 }
@@ -142,6 +155,10 @@ void loop() {
     if (sensorState != prevSensorState) {
       prevSensorState = sensorState;
       lightSensorEventQueue.addNewEvent(ValueChangeEvent(sensorState ? 1 : 0));
+
+      if (sensorState == false) {
+        startSiren();
+      }
     }
   }
 
@@ -150,6 +167,14 @@ void loop() {
   if (digitalValue != movementSensor0Value) {
     movementSensor0Value = digitalValue;
     movementSensor0EventQueue.addNewEvent(ValueChangeEvent(movementSensor0Value ? 1 : 0));
+
+    if (movementSensor0Value == true) {
+      startSiren();
+    }
+  }
+
+  if(sirenStartedMillis > -1 && time - sirenStartedMillis >= sirenTimeoutMillis) {
+    stopSiren();
   }
 
   if (clientConnected) {
@@ -176,6 +201,8 @@ void loop() {
       client.print(',');
       client.print(rssiText);
       client.println(WiFi.RSSI());
+    } else if(serverCommand.startsWith(stopSirenText)) {
+      stopSiren();
     }
   }
 }
