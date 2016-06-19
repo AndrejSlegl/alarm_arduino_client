@@ -25,6 +25,7 @@ WiFiPersistentConnector connector("SLEGL WiFi", "pnr41wlan");
 WiFiClient client;
 ValueChangeEventQueue lightSensorEventQueue(20);
 ValueChangeEventQueue movementSensor0EventQueue(20);
+String serverCommand;
 bool wifiConnected = false;
 bool clientConnected = false;
 bool clientConnectionOn = true;
@@ -35,6 +36,7 @@ int sensorValueCount = 0;
 int sensorLastSampleMillis = 0;
 bool movementSensor0Value = false;
 int sirenStartedMillis = 0;
+bool sirenActivated = false;
 
 void updateClientConnectionStatus(bool connected) {
   if (clientConnected == connected)
@@ -69,8 +71,10 @@ void keepClientConnected() {
 }
 
 void startSiren() {
-  digitalWrite(sirenPin, HIGH);
-  sirenStartedMillis = millis();
+  if (sirenActivated) {
+    digitalWrite(sirenPin, HIGH);
+    sirenStartedMillis = millis();
+  }
 }
 
 void stopSiren() {
@@ -112,7 +116,6 @@ void loop() {
 #endif
   }
 
-  String serverCommand;
   while (client.available() && serverCommand.lastIndexOf(NEW_LINE) < 0) {
     char c = client.read();
     serverCommand += c;
@@ -192,17 +195,39 @@ void loop() {
       client.println(event->value);
     }
 
-    if (serverCommand.startsWith(statusQueryText)) {
-      client.print(sectorText);
-      client.print(prevSensorState ? 1 : 0);
-      client.print(',');
-      client.print(movement0Text);
-      client.print(movementSensor0Value ? 1 : 0);
-      client.print(',');
-      client.print(rssiText);
-      client.println(WiFi.RSSI());
-    } else if(serverCommand.startsWith(stopSirenText)) {
-      stopSiren();
+    int idx = serverCommand.lastIndexOf(NEW_LINE);
+    if(idx >= 0)
+    {
+      serverCommand.remove(idx); // remove newline at the end
+      
+      if (serverCommand == statusQueryText) {
+        client.print(sectorText);
+        client.print(prevSensorState ? 1 : 0);
+        client.print(',');
+        client.print(movement0Text);
+        client.print(movementSensor0Value ? 1 : 0);
+        client.print(',');
+        client.print(rssiText);
+        client.println(WiFi.RSSI());
+      } else if(serverCommand == stopSirenText) {
+        stopSiren();
+      } else {
+        idx = serverCommand.indexOf(':');
+        if (idx >= 0 && idx < serverCommand.length() - 1) {
+          String parameterName = serverCommand.substring(0, idx);
+          String parameterValue = serverCommand.substring(idx + 1);
+          int integerValue = parameterValue.toInt();
+          
+          if (parameterName == "sirenActivated") {
+            sirenActivated = integerValue > 0;
+  
+            if (!sirenActivated)
+              stopSiren();
+          }
+        }
+      }
+
+      serverCommand.remove(0);
     }
   }
 }
