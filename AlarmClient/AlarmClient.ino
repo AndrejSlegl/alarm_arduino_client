@@ -12,13 +12,11 @@ const int movementSensor0Pin = 0;
 const int sirenPin = 7;
 int sensorReadingPositiveThreshold = 800;
 int readingSamplingMillis = 50;
-int sirenTimeoutMillis = 5 * 1000 * 60;
 
 const char sectorText[] = "sector0:";
 const char rssiText[] = "rssi:";
 const char movement0Text[] = "movement0:";
 const char statusQueryText[] = "status?";
-const char stopSirenText[] = "stopSiren!";
 char server[] = "192.168.1.111";
 int port = 43254;
 WiFiPersistentConnector connector("SLEGL WiFi", "pnr41wlan");
@@ -35,8 +33,6 @@ int sensorValueSum = 0;
 int sensorValueCount = 0;
 int sensorLastSampleMillis = 0;
 bool movementSensor0Value = false;
-int sirenStartedMillis = 0;
-bool sirenActivated = false;
 
 void updateClientConnectionStatus(bool connected) {
   if (clientConnected == connected)
@@ -45,6 +41,9 @@ void updateClientConnectionStatus(bool connected) {
   clientConnected = connected;
   
   digitalWrite(clientLedPin, connected ? HIGH : LOW);
+
+  if (!connected)
+    digitalWrite(sirenPin, LOW);
   
 #ifdef DEBUG
   Serial.println(connected ? "Connected to server" : "Disconnected from server");
@@ -70,18 +69,6 @@ void keepClientConnected() {
   }
 }
 
-void startSiren() {
-  if (sirenActivated) {
-    digitalWrite(sirenPin, HIGH);
-    sirenStartedMillis = millis();
-  }
-}
-
-void stopSiren() {
-  digitalWrite(sirenPin, LOW);
-  sirenStartedMillis = -1;
-}
-
 void setup() {
 #ifdef DEBUG
   Serial.begin(9600);
@@ -94,7 +81,7 @@ void setup() {
   pinMode(clientLedPin, OUTPUT);
   pinMode(sirenPin, OUTPUT);
 
-  stopSiren();
+  digitalWrite(sirenPin, LOW);
   
   connector.start();
 }
@@ -117,8 +104,7 @@ void loop() {
   }
 
   while (client.available() && serverCommand.lastIndexOf(NEW_LINE) < 0) {
-    char c = client.read();
-    serverCommand += c;
+    serverCommand += (char)client.read();
   }
 
   keepClientConnected();
@@ -158,10 +144,6 @@ void loop() {
     if (sensorState != prevSensorState) {
       prevSensorState = sensorState;
       lightSensorEventQueue.addNewEvent(ValueChangeEvent(sensorState ? 1 : 0));
-
-      if (sensorState == false) {
-        startSiren();
-      }
     }
   }
 
@@ -170,14 +152,6 @@ void loop() {
   if (digitalValue != movementSensor0Value) {
     movementSensor0Value = digitalValue;
     movementSensor0EventQueue.addNewEvent(ValueChangeEvent(movementSensor0Value ? 1 : 0));
-
-    if (movementSensor0Value == true) {
-      startSiren();
-    }
-  }
-
-  if(sirenStartedMillis > -1 && time - sirenStartedMillis >= sirenTimeoutMillis) {
-    stopSiren();
   }
 
   if (clientConnected) {
@@ -209,8 +183,6 @@ void loop() {
         client.print(',');
         client.print(rssiText);
         client.println(WiFi.RSSI());
-      } else if(serverCommand == stopSirenText) {
-        stopSiren();
       } else {
         idx = serverCommand.indexOf(':');
         if (idx >= 0 && idx < serverCommand.length() - 1) {
@@ -218,17 +190,12 @@ void loop() {
           String parameterValue = serverCommand.substring(idx + 1);
           int integerValue = parameterValue.toInt();
           
-          if (parameterName == "sirenActivated") {
-            sirenActivated = integerValue > 0;
-  
-            if (!sirenActivated)
-              stopSiren();
-          } else if (parameterName == "readingSamplingMillis") {
+          if (parameterName == "readingSamplingMillis") {
             readingSamplingMillis = integerValue;
           } else if (parameterName == "sensorReadingPositiveThreshold") {
             sensorReadingPositiveThreshold = integerValue;
-          } else if (parameterName == "sirenTimeoutMillis") {
-            sirenTimeoutMillis = integerValue;
+          } else if (parameterName == "sirenOn") {
+            digitalWrite(sirenPin, integerValue > 0 ? HIGH : LOW);
           }
         }
       }
