@@ -10,6 +10,8 @@ const int lightSensorPin = 0;
 const int clientLedPin = 6;
 const int movementSensor0Pin = 0;
 const int sirenPin = 7;
+const int reconnectDelayMillis = 1000;
+const int disconnectTimeoutMillis = 1000 * 60 * 2;
 int sensorReadingPositiveThreshold = 800;
 int readingSamplingMillis = 50;
 
@@ -21,8 +23,8 @@ char server[] = "192.168.1.111";
 int port = 43254;
 WiFiPersistentConnector connector("SLEGL WiFi", "pnr41wlan");
 WiFiClient client;
-ValueChangeEventQueue lightSensorEventQueue(20);
-ValueChangeEventQueue movementSensor0EventQueue(20);
+ValueChangeEventQueue lightSensorEventQueue(10);
+ValueChangeEventQueue movementSensor0EventQueue(10);
 String serverCommand;
 bool wifiConnected = false;
 bool clientConnected = false;
@@ -33,6 +35,8 @@ int sensorValueSum = 0;
 int sensorValueCount = 0;
 int sensorLastSampleMillis = 0;
 bool movementSensor0Value = false;
+int clientDisconnectedMillis = 0;
+int lastServerMessageMillis = 0;
 
 void updateClientConnectionStatus(bool connected) {
   if (clientConnected == connected)
@@ -42,8 +46,12 @@ void updateClientConnectionStatus(bool connected) {
   
   digitalWrite(clientLedPin, connected ? HIGH : LOW);
 
-  if (!connected)
+  if (!connected) {
+    clientDisconnectedMillis = millis();
     digitalWrite(sirenPin, LOW);
+  } else {
+    lastServerMessageMillis = millis();
+  }
   
 #ifdef DEBUG
   Serial.println(connected ? "Connected to server" : "Disconnected from server");
@@ -55,9 +63,15 @@ void keepClientConnected() {
     bool connected = client.connected();
     
     updateClientConnectionStatus(connected);
+    
     if (!connected && clientConnectionOn) {
-      connected = client.connect(server, port);
-      updateClientConnectionStatus(connected);
+      int time = millis();
+      if (time - clientDisconnectedMillis >= reconnectDelayMillis) {
+        client.stop();
+        connected = client.connect(server, port);
+        updateClientConnectionStatus(connected);
+        clientDisconnectedMillis = time;
+      }
     }
 
     if (connected && !clientConnectionOn)
@@ -173,6 +187,7 @@ void loop() {
     if(idx >= 0)
     {
       serverCommand.remove(idx); // remove newline at the end
+      lastServerMessageMillis = time;
       
       if (serverCommand == statusQueryText) {
         client.print(sectorText);
@@ -202,5 +217,10 @@ void loop() {
 
       serverCommand.remove(0);
     }
+  }
+
+  if (time - lastServerMessageMillis >= disconnectTimeoutMillis) {
+    client.stop();
+    lastServerMessageMillis = millis();
   }
 }
