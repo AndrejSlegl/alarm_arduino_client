@@ -39,6 +39,7 @@ bool WiFiPersistentConnector::update() {
     
         if (status == WL_CONNECTED) {
           //Serial.println("Connection established.");
+          delay(1000);
           return true;
         }
 
