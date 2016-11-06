@@ -67,6 +67,7 @@ void keepClientConnected() {
     if (!connected && clientConnectionOn) {
       int time = millis();
       if (time - clientDisconnectedMillis >= reconnectDelayMillis) {
+        client.flush();
         client.stop();
         connected = client.connect(server, port);
         updateClientConnectionStatus(connected);
@@ -78,6 +79,7 @@ void keepClientConnected() {
       client.stop();
   }
   else {
+    client.flush();
     client.stop();
     updateClientConnectionStatus(false);
   }
@@ -168,12 +170,15 @@ void loop() {
     movementSensor0EventQueue.addNewEvent(ValueChangeEvent(movementSensor0Value ? 1 : 0));
   }
 
+  bool flushClient = false;
+
   if (clientConnected) {
     ValueChangeEvent* event = lightSensorEventQueue.getNextEvent();
 
     if (event != NULL) {
       client.print(sectorText);
       client.println(event->value);
+      flushClient = true;
     }
 
     event = movementSensor0EventQueue.getNextEvent();
@@ -181,6 +186,7 @@ void loop() {
     if (event != NULL) {
       client.print(movement0Text);
       client.println(event->value);
+      flushClient = true;
     }
 
     int idx = serverCommand.lastIndexOf(NEW_LINE);
@@ -198,6 +204,7 @@ void loop() {
         client.print(',');
         client.print(rssiText);
         client.println(WiFi.RSSI());
+        flushClient = true;
       } else {
         idx = serverCommand.indexOf(':');
         if (idx >= 0 && idx < serverCommand.length() - 1) {
@@ -220,7 +227,10 @@ void loop() {
   }
 
   if (time - lastServerMessageMillis >= disconnectTimeoutMillis) {
+    client.flush();
     client.stop();
     lastServerMessageMillis = millis();
+  } else if (flushClient) {
+    client.flush();
   }
 }
