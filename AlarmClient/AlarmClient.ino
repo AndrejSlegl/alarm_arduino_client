@@ -10,8 +10,11 @@ const int lightSensorPin = 0;
 const int clientLedPin = 6;
 const int movementSensor0Pin = 0;
 const int sirenPin = 7;
+const int resetPin = 1;
+
 const int reconnectDelayMillis = 1000;
 const int disconnectTimeoutMillis = 1000 * 60 * 2;
+const int resetAfterMillis = 1000 * 60 * 60 * 24;
 int sensorReadingPositiveThreshold = 800;
 int readingSamplingMillis = 50;
 
@@ -96,13 +99,20 @@ void setup() {
   pinMode(movementSensor0Pin, INPUT_PULLUP);
   pinMode(clientLedPin, OUTPUT);
   pinMode(sirenPin, OUTPUT);
+  pinMode(resetPin, OUTPUT);
 
+  digitalWrite(resetPin, HIGH);
   digitalWrite(sirenPin, LOW);
   
   connector.start();
 }
 
 void loop() {
+  int time = millis();
+
+  if(time > resetAfterMillis)
+    digitalWrite(resetPin, LOW);
+  
   connector.update();
 
   bool wifiCon = WiFi.status() == WL_CONNECTED;
@@ -140,11 +150,12 @@ void loop() {
       connector.start();
     else if (command == "wifi off")
       connector.stop();
+    else if (command == "reset")
+      digitalWrite(resetPin, LOW);
   }
 #endif
 
   int sensorValue = analogRead(lightSensorPin);
-  int time = millis();
 
   sensorValueSum += sensorValue;
   sensorValueCount++;
